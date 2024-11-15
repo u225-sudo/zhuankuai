@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Gamedev Phaser Workshop - lesson 16: Randomizing gameplay</title>
+    <style>* { padding: 0; margin: 0; }</style>
+    <script src="clove/phaser.min.js"></script>
+</head>
+<body>
+<script>
+    //使用Phaser框架创建一个游戏的基本结构
+var game = new Phaser.Game(480, 320, Phaser.AUTO, null, {preload: preload, create: create, update: update});
+
+var ball;
+var paddle;
+var bricks;
+var newBrick;
+var brickInfo;
+var scoreText;
+var score = 0;//初始目标分数为0
+var lives = 3;//初始生命次数为3
+var livesText;
+var lifeLostText;
+var playing = false;
+var startButton;
+var startTime; // 记录游戏开始的时间
+
+//Phaser游戏中的预加载阶段，用于加载游戏所需的资源
+function preload() {
+    game.scale.scaleMode = Phaser.ScaleManager.SHOW_ALL;
+    game.scale.pageAlignHorizontally = true;
+    game.scale.pageAlignVertically = true;
+    game.stage.backgroundColor = '#eee';
+    game.load.image('paddle', 'image/paddle.png');
+    game.load.image('brick', 'image/brick.png');
+    game.load.spritesheet('ball', 'image/wobble.png', 20, 20);
+    game.load.spritesheet('button', 'image/button.png', 120, 40);
+}
+
+//Phaser游戏中的创建阶段，用于初始化游戏对象和设置游戏状态
+function create() {
+    game.physics.startSystem(Phaser.Physics.ARCADE);
+    game.physics.arcade.checkCollision.down = false;
+    ball = game.add.sprite(game.world.width*0.5, game.world.height-25, 'ball');
+    ball.animations.add('wobble', [0,1,0,2,0,1,0,2,0], 24);
+    ball.anchor.set(0.5);
+    game.physics.enable(ball, Phaser.Physics.ARCADE);
+    ball.body.collideWorldBounds = true;
+    ball.body.bounce.set(1);
+    ball.checkWorldBounds = true;
+    ball.events.onOutOfBounds.add(ballLeaveScreen, this);
+
+    paddle = game.add.sprite(game.world.width*0.5, game.world.height-5, 'paddle');
+    paddle.anchor.set(0.5,1);
+    game.physics.enable(paddle, Phaser.Physics.ARCADE);
+    paddle.body.immovable = true;
+
+    initBricks();
+
+    textStyle = { font: '18px Arial', fill: '#0095DD' };
+    scoreText = game.add.text(5, 5, '目标分数: 0', textStyle);
+    livesText = game.add.text(game.world.width-5, 5, '生命次数: '+lives, textStyle);
+    livesText.anchor.set(1,0);
+    lifeLostText = game.add.text(game.world.width*0.5, game.world.height*0.5, '点击继续游戏', textStyle);
+    lifeLostText.anchor.set(0.5);
+    lifeLostText.visible = false;
+
+    startButton = game.add.button(game.world.width*0.5, game.world.height*0.5, 'button', startGame, this, 1, 0, 2);
+    startButton.anchor.set(0.5);
+
+    startTime = new Date().getTime(); // 记录游戏开始的时间
+}
+
+//Phaser游戏中的更新阶段，用于处理游戏逻辑和更新游戏对象的状态
+function update() {
+    game.physics.arcade.collide(ball, paddle, ballHitPaddle);
+    game.physics.arcade.collide(ball, bricks, ballHitBrick);
+    if(playing) {
+        paddle.x = game.input.x || game.world.width*0.5;
+    }
+}
+
+//用于初始化砖块（bricks）的函数
+function initBricks() {
+    brickInfo = {
+        width: 50,
+        height: 20,
+        count: {
+            row: 7,
+            col: 3
+        },
+        offset: {
+            top: 50,
+            left: 60
+        },
+        padding: 10
+    }
+    bricks = game.add.group();
+    for(c=0; c<brickInfo.count.col; c++) {
+        for(r=0; r<brickInfo.count.row; r++) {
+            var brickX = (r*(brickInfo.width+brickInfo.padding))+brickInfo.offset.left;
+            var brickY = (c*(brickInfo.height+brickInfo.padding))+brickInfo.offset.top;
+            newBrick = game.add.sprite(brickX, brickY, 'brick');
+            game.physics.enable(newBrick, Phaser.Physics.ARCADE);
+            newBrick.body.immovable = true;
+            newBrick.anchor.set(0.5);
+            bricks.add(newBrick);
+        }
+    }
+}
+
+//用于处理球（ball）与砖块（brick）碰撞的函数
+function ballHitBrick(ball, brick) {
+    var killTween = game.add.tween(brick.scale);
+    killTween.to({x:0,y:0}, 200, Phaser.Easing.Linear.None);
+    killTween.onComplete.addOnce(function(){
+        brick.kill();
+    }, this);
+    killTween.start();
+    score += 10;
+    scoreText.setText('目标分数: '+score);
+    if(score === brickInfo.count.row*brickInfo.count.col*10) {
+        var endTime = new Date().getTime(); // 记录游戏结束的时间
+        var totalTime = (endTime - startTime) / 1000; // 计算总时间（秒）
+        if (totalTime < 45) {
+            alert('恭喜过关,你已超过90%的玩家！\n你通关总时长为: ' + totalTime + '秒');
+        } else if (totalTime >= 45 && totalTime < 60) {
+            alert('恭喜过关,你已超过60%的玩家！\n你通关总时长为: ' + totalTime + '秒');
+        } else {
+            alert('恭喜过关,你已超过30%的玩家！\n你通关总时长为: ' + totalTime + '秒');
+        }
+        location.reload();
+    }
+}
+
+//用于处理球（ball）离开屏幕的函数
+function ballLeaveScreen() {
+    lives--;
+    if(lives) {
+        livesText.setText('生命次数: '+lives);
+        lifeLostText.visible = true;
+        ball.reset(game.world.width*0.5, game.world.height-25);
+        paddle.reset(game.world.width*0.5, game.world.height-5);
+        game.input.onDown.addOnce(function(){
+            lifeLostText.visible = false;
+            ball.body.velocity.set(150, -150);
+        }, this);
+    }
+    else {
+        alert('很遗憾，你输了，游戏结束！');
+        location.reload();
+    }
+}
+
+//用于处理球（ball）与挡板（paddle）碰撞的函数
+function ballHitPaddle(ball, paddle) {
+    ball.animations.play('wobble');
+    ball.body.velocity.x = -1*5*(paddle.x-ball.x);
+}
+
+//用于开始游戏的函数
+function startGame() {
+    startButton.destroy();
+    ball.body.velocity.set(150, -150);
+    playing = true;
+}
+</script>
+</body>
+</html>
